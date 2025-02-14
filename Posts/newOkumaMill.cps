@@ -27,7 +27,7 @@ legal = "Copyright (C) 2012-2024 by Autodesk, Inc.";
 certificationLevel = 2;
 minimumRevision = 45917;
 
-longDescription = "Milling post for OKUMA. Supports an optional rotary table. Enable the 'useG16' property to do machine retracts in H0. Enable the 'Use fixture offset function' property to use CALL OO88 for 3+2 machining.";
+longDescription = "New Milling post for OKUMA. Supports an optional rotary table. Enable the 'useG16' property to do machine retracts in H0. Enable the 'Use fixture offset function' property to use CALL OO88 for 3+2 machining and Use Dynamic fixture offset function for G605.";
 
 extension = "MIN";
 setCodePage("ascii");
@@ -412,6 +412,7 @@ var retracted = false; // specifies that the tool has been retracted to the safe
 var masterAxis;
 var loadMonitorVal = 0;
 var prevLoadMonitorVal = 0;
+var sequenceNumberMax = 99999;
 probeMultipleFeatures = true;
 
 /**
@@ -421,6 +422,9 @@ function writeBlock() {
   if (getProperty("showSequenceNumbers") == "true") {
     writeWords2("N" + sequenceNumber, arguments);
     sequenceNumber += getProperty("sequenceNumberIncrement");
+    if (sequenceNumber > sequenceNumberMax){
+      sequenceNumber = getProperty("sequenceNumberStart")
+    }
   } else {
     writeWords(arguments);
   }
@@ -435,11 +439,15 @@ function writeOptionalBlock() {
     if (words) {
       writeWords("/", "N" + sequenceNumber, words);
       sequenceNumber += getProperty("sequenceNumberIncrement");
+      if (sequenceNumber > sequenceNumberMax){
+        sequenceNumber = getProperty("sequenceNumberStart")
+      }
     }
   } else {
     writeWords2("/", arguments);
   }
 }
+
 
 function formatComment(text) {
   return "(" + String(text).replace(/[()]/g, "") + ")";
@@ -471,7 +479,11 @@ function forceSequenceNumbers(force) {
 }
 
 function skipNLines(n) {
+  if ((sequenceNumber + 1) > sequenceNumberMax){
+    sequenceNumber = getProperty("sequenceNumberStart")
+  }
   return ("N" + (n * getProperty("sequenceNumberIncrement") + sequenceNumber));
+  
 }
 
 // Start of machine configuration logic
@@ -1242,8 +1254,8 @@ function fixtureOffset(abc) {
     conditional(machineConfiguration.isMachineCoordinate(2), "PC=" + abcFormat.format(abc.z)),
     conditional(machineConfiguration.isMachineCoordinate(1), "PB=" + abcFormat.format(abc.y)),
     conditional(machineConfiguration.isMachineCoordinate(0), "PA=" + abcFormat.format(abc.x)),
-    "PH=" + xyzFormat.format(currentSection.workOffset),
-    "PP=" + xyzFormat.format(fixtureOffsetWCS)
+    "PH=" + hFormat.format(currentSection.workOffset),
+    "PP=" + hFormat.format(fixtureOffsetWCS)
   );
   writeBlock(gFormat.format(15), hFormat.format(fixtureOffsetWCS));
   gMotionModal.reset();
@@ -1252,8 +1264,8 @@ function fixtureOffset(abc) {
 function DynamicFixture() {
     writeBlock(
       gFormat.format(605),
-      "H=" + xyzFormat.format(currentSection.workOffset),
-      "Q=" + xyzFormat.format(fixtureOffsetWCS),
+      "H=" + hFormat.format(currentSection.workOffset),
+      "Q=" + hFormat.format(fixtureOffsetWCS),
     );
     gMotionModal.reset();
 }
@@ -1720,7 +1732,7 @@ function onSection() {
       onCommand(COMMAND_OPTIONAL_STOP);
     }
 
-    if (tool.number > 99999999) {
+    if (tool.number > 9999) {
       warning(localize("Tool number exceeds maximum value."));
     }
     if (tool.comment) {
@@ -1934,6 +1946,10 @@ function prepositionXYZ(position, abc) {
   }
   forceAny();
   if (operationSupportsTCP) {
+    if (useDynamicFixture && dfo_ON){
+      writeBlock(gFormat.format(604));
+      dfo_ON = false
+  }
     writeBlock(
       gFormat.format(169),
       xOutput.format(position.x),
@@ -3500,6 +3516,11 @@ function onClose() {
   if (machineConfiguration.isMultiAxisConfiguration()) {
     setWorkPlane(new Vector(0, 0, 0)); // reset working plane
   }
+
+  if (useDynamicFixture && dfo_ON){
+    writeBlock(gFormat.format(604));
+    dfo_ON = false
+}
 
   // writeRetract(X, Y);
 
