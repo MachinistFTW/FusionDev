@@ -1264,8 +1264,8 @@ function fixtureOffset(abc) {
 function DynamicFixture() {
     writeBlock(
       gFormat.format(605),
-      "H=" + hFormat.format(currentSection.workOffset),
-      "Q=" + hFormat.format(fixtureOffsetWCS),
+      "H=" + toolFormat.format(currentSection.workOffset),
+      "Q=" + toolFormat.format(fixtureOffsetWCS),
     );
     gMotionModal.reset();
 }
