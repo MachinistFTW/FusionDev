@@ -1,29 +1,14 @@
 /**
-  Copyright (C) 2012-2024 by Autodesk, Inc.
-  All rights reserved.
-
-  OKUMA post processor configuration.
-
   $Revision: 44115 1104db9da08471dc1d758431fd9ef8822fd95c21 $
   $Date: 2024-03-12 07:10:57 $
 
   FORKID {2F9AB8A9-6D4F-4087-81B1-3E14AE260F81}
 */
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-//                        MANUAL NC COMMANDS
-//
-// The following ACTION commands are supported by this post.
-//
-//     spindleLoadMonitor:load        - Changes Spindle Load Monitoring value from default set in getProperty("")
-//                                      Will be reset to default property value at the end of the section.
-//
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 description = "OKUMA";
 vendor = "OKUMA";
 vendorUrl = "http://www.okuma.com";
-legal = "Copyright (C) 2012-2024 by Autodesk, Inc.";
+legal = "";
 certificationLevel = 2;
 minimumRevision = 45917;
 
@@ -41,12 +26,13 @@ maximumCircularRadius = spatial(1000, MM);
 minimumCircularSweep = toRad(0.01);
 maximumCircularSweep = toRad(180);
 allowHelicalMoves = true;
-allowedCircularPlanes = 1 << PLANE_XY; // allow XY plane only
+allowedCircularPlanes = 1 << PLANE_XY; 
 
-highFeedMapping = HIGH_FEED_NO_MAPPING; // must be set if axes are not synchronized
+highFeedMapping = HIGH_FEED_NO_MAPPING; 
 highFeedrate = (unit == IN) ? 100 : 5000;
 
-// user-defined properties
+
+
 properties = {
   writeMachine: {
     title      : "Write machine",
@@ -283,7 +269,6 @@ properties = {
   }
 };
 
-// wcs definiton
 wcsDefinitions = {
   useZeroOffset: false,
   wcs          : [
@@ -292,10 +277,7 @@ wcsDefinitions = {
 };
 
 var singleLineCoolant = false; // specifies to output multiple coolant codes in one line rather than in separate lines
-// samples:
-// {id: COOLANT_THROUGH_TOOL, on: 88, off: 89}
-// {id: COOLANT_THROUGH_TOOL, on: [8, 88], off: [9, 89]}
-// {id: COOLANT_THROUGH_TOOL, on: "M88 P3 (myComment)", off: "M89"}
+
 var coolants = [
   {id:COOLANT_FLOOD, on:8},
   {id:COOLANT_MIST, on:7},
@@ -412,12 +394,11 @@ var retracted = false; // specifies that the tool has been retracted to the safe
 var masterAxis;
 var loadMonitorVal = 0;
 var prevLoadMonitorVal = 0;
-var sequenceNumberMax = 99999;
+var sequenceNumberMax = 9999;
+var currentWorkPlaneABC = undefined;
 probeMultipleFeatures = true;
 
-/**
-  Writes the specified block.
-*/
+
 function writeBlock() {
   if (getProperty("showSequenceNumbers") == "true") {
     writeWords2("N" + sequenceNumber, arguments);
@@ -430,9 +411,6 @@ function writeBlock() {
   }
 }
 
-/**
-  Writes the specified optional block.
-*/
 function writeOptionalBlock() {
   if (getProperty("showSequenceNumbers") == "true") {
     var words = formatWords(arguments);
@@ -448,14 +426,10 @@ function writeOptionalBlock() {
   }
 }
 
-
 function formatComment(text) {
   return "(" + String(text).replace(/[()]/g, "") + ")";
 }
 
-/**
-  Writes the specified block - used for tool changes only.
-*/
 function writeToolBlock() {
   var show = getProperty("showSequenceNumbers");
   setProperty("showSequenceNumbers", (show == "true" || show == "toolChange") ? "true" : "false");
@@ -463,9 +437,6 @@ function writeToolBlock() {
   setProperty("showSequenceNumbers", show);
 }
 
-/**
-  Output a comment.
-*/
 function writeComment(text) {
   writeln(formatComment(text));
 }
@@ -499,9 +470,7 @@ var receivedMachineConfiguration;
 var operationSupportsTCP;
 var multiAxisFeedrate;
 
-/**
-  Activates the machine configuration (both from CAM and hardcoded)
-*/
+
 function activateMachine() {
   // disable unsupported rotary axes output
   if (!machineConfiguration.isMachineCoordinate(0) && (typeof aOutput != "undefined")) {
@@ -593,9 +562,7 @@ function getBodyLength(tool) {
   return tool.bodyLength + tool.holderLength;
 }
 
-/**
-  Defines a hardcoded machine configuration
-*/
+
 function defineMachine() {
   var useTCP = true;
   if (getProperty("rotaryTableAxis") != "none") {
@@ -735,6 +702,13 @@ function onOpen() {
   }
   if (programComment) {
     writeComment(programComment);
+  } else{
+    if (hasGlobalParameter("document-path")) {
+      var filename = FileSystem.getFilename(getGlobalParameter("document-path"));
+      if (filename) {
+        writeln("(" + filename + ")");
+      }
+    }    
   }
 
   // dump machine configuration
@@ -1181,8 +1155,6 @@ function initializeActiveFeeds() {
   }
 }
 
-var currentWorkPlaneABC = undefined;
-
 function forceWorkPlane() {
   currentWorkPlaneABC = undefined;
 }
@@ -1248,9 +1220,11 @@ function cancelWorkPlane(force) {
 function fixtureOffset(abc) {
   writeBlock(
     "CALL OO88",
+    /* Not functional code- do not use
     "PX=" + xyzFormat.format(0),
     "PY=" + xyzFormat.format(0),
     "PZ=" + xyzFormat.format(0),
+    */
     conditional(machineConfiguration.isMachineCoordinate(2), "PC=" + abcFormat.format(abc.z)),
     conditional(machineConfiguration.isMachineCoordinate(1), "PB=" + abcFormat.format(abc.y)),
     conditional(machineConfiguration.isMachineCoordinate(0), "PA=" + abcFormat.format(abc.x)),
@@ -1355,9 +1329,6 @@ function getWorkPlaneMachineABC(workPlane, _setWorkPlane, rotate) {
   return abc;
 }
 
-/**
-  Outputs the Rotary axis direction code.
-*/
 var previousABC = new Vector(0, 0, 0);
 function getRotaryDirectionCode(abc) {
   if (masterAxis == -1) {
@@ -1377,10 +1348,6 @@ function getRotaryDirectionCode(abc) {
   return "";
 }
 
-/**
-  Compare a text string to acceptable choices.
-  Returns -1 if there is no match.
-*/
 function parseChoice() {
   for (var i = 1; i < arguments.length; ++i) {
     if (String(arguments[0]).toUpperCase() == String(arguments[i]).toUpperCase()) {
@@ -1649,39 +1616,41 @@ function setAbsIncMode(incremental, xyz, abc) {
 }
 
 function onSection() {
-  var insertToolCall = isFirstSection() ||
-    currentSection.getForceToolChange && currentSection.getForceToolChange() ||
-    (tool.number != getPreviousSection().getTool().number);
-
-  retracted = false; // specifies that the tool has been retracted to the safe plane
-
-  var zIsOutput = false; // true if the Z-position has been output, used for patterns
-
-  var newWorkOffset = isFirstSection() ||
-    (getPreviousSection().workOffset != currentSection.workOffset); // work offset changes
-  var newWorkPlane = isFirstSection() ||
-    !isSameDirection(getPreviousSection().getGlobalFinalToolAxis(), currentSection.getGlobalInitialToolAxis()) ||
-    (currentSection.isOptimizedForMachine() && getPreviousSection().isOptimizedForMachine() &&
-      Vector.diff(getPreviousSection().getFinalToolAxisABC(), currentSection.getInitialToolAxisABC()).length > 1e-4) ||
-    (!machineConfiguration.isMultiAxisConfiguration() && currentSection.isMultiAxis()) ||
-    (getPreviousSection().isMultiAxis() != currentSection.isMultiAxis()); // force newWorkPlane between indexing and simultaneous operations
-
+  var operationState = {
+    insertToolCall: isFirstSection() ||
+      currentSection.getForceToolChange && currentSection.getForceToolChange() ||
+      (tool.number != getPreviousSection().getTool().number),
+  
+    retracted: false,
+    
+    zIsOutput: false,
+  
+    newWorkOffset: isFirstSection() ||
+      (getPreviousSection().workOffset != currentSection.workOffset), // work offset changes
+  
+    newWorkPlane: isFirstSection() ||
+      !isSameDirection(getPreviousSection().getGlobalFinalToolAxis(), currentSection.getGlobalInitialToolAxis()) ||
+      (currentSection.isOptimizedForMachine() && getPreviousSection().isOptimizedForMachine() &&
+        Vector.diff(getPreviousSection().getFinalToolAxisABC(), currentSection.getInitialToolAxisABC()).length > 1e-4) ||
+      (!machineConfiguration.isMultiAxisConfiguration() && currentSection.isMultiAxis()) ||
+      (getPreviousSection().isMultiAxis() != currentSection.isMultiAxis()) // force newWorkPlane between indexing and simultaneous operations
+  };
+  
   // define smoothing mode
   initializeSmoothing();
 
-  if (insertToolCall || newWorkOffset || newWorkPlane) {
-    // stop spindle before retract during tool change
-    if (insertToolCall && !isFirstSection()) {
+  if (operationState.insertToolCall || operationState.newWorkOffset || operationState.newWorkPlane) {
+    if (operationState.insertToolCall && !isFirstSection()) {
       onCommand(COMMAND_STOP_SPINDLE);
     }
     // retract to safe plane
     writeRetract(Z);
-    if (newWorkPlane && !isFirstSection()) {
+    if (operationState.newWorkPlane && !isFirstSection()) {
       setWorkPlane(new Vector(0, 0, 0)); // reset working plane
     }
   }
   // disable smoothing
-  if ((insertToolCall && !isFirstSection()) || smoothing.force) {
+  if ((operationState.insertToolCall && !isFirstSection()) || smoothing.force) {
     setSmoothing(false);
   }
 
@@ -1710,7 +1679,7 @@ function onSection() {
   }
 
   var spindleChanged = tool.type != TOOL_PROBE &&
-    (insertToolCall || forceSpindleSpeed || isFirstSection() ||
+    (operationState.insertToolCall || forceSpindleSpeed || isFirstSection() ||
     (rpmFormat.areDifferent(spindleSpeed, sOutput.getCurrent())) ||
     (tool.clockwise != getPreviousSection().getTool().clockwise));
 
@@ -1719,7 +1688,7 @@ function onSection() {
     prevLoadMonitorVal = 0;
   }
 
-  if (insertToolCall) {
+  if (operationState.insertToolCall) {
     forceModals();
     forceWorkPlane();
     if (useDynamicFixture && dfo_ON){
@@ -1821,7 +1790,7 @@ function onSection() {
   writeBlock(gPlaneModal.format(17), gAbsIncModal.format(90), gFeedModeModal.format(94));
 
   // wcs
-  if (insertToolCall) { // force work offset when changing tool
+  if (operationState.insertToolCall) { // force work offset when changing tool
     currentWorkOffset = undefined;
   }
 
@@ -1848,10 +1817,10 @@ function onSection() {
   gMotionModal.reset();
 
   var initialPosition = getFramePosition(currentSection.getInitialPosition());
-  if (!retracted && !insertToolCall) {
+  if (!operationState.retracted && !operationState.insertToolCall) {
     if (getCurrentPosition().z < initialPosition.z) {
       writeBlock(gMotionModal.format(0), zOutput.format(initialPosition.z));
-      zIsOutput = true;
+      operationState.zIsOutput = true;
     }
   }
 
@@ -1877,15 +1846,15 @@ function onSection() {
     }
   }
 
-  if (insertToolCall || retracted || (!isFirstSection() && getPreviousSection().isMultiAxis())) {
-    zIsOutput = true;
+  if (operationState.insertToolCall || operationState.retracted || (!isFirstSection() && getPreviousSection().isMultiAxis())) {
+    operationState.zIsOutput = true;
   }
 
   if (getProperty("useParametricFeed") &&
       hasParameter("operation-strategy") &&
       (getParameter("operation-strategy") != "drill") && // legacy
       !(currentSection.hasAnyCycle && currentSection.hasAnyCycle())) {
-    if (!insertToolCall &&
+    if (!operationState.insertToolCall &&
         activeMovements &&
         (getCurrentSectionId() > 0) &&
         ((getPreviousSection().getPatternId() == currentSection.getPatternId()) && (currentSection.getPatternId() != 0))) {
@@ -1910,9 +1879,9 @@ function onSection() {
   }
 
   // define subprogram
-  subprogramDefine(initialPosition, abc, retracted, zIsOutput);
+  subprogramDefine(initialPosition, abc, operationState.retracted, operationState.zIsOutput);
 
-  retracted = false;
+  operationState.retracted = false;
 }
 
 Matrix.getOrientationFromDirection = function (ijk) {
